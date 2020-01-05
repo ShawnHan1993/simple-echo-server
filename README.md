@@ -1,6 +1,8 @@
 # simple-echo-server
 
-A simple echo server write in C by using difference Linux system call for listening file descriptors
+A simple echo server write in C by using difference Linux system call for listening file descriptors.
+
+Basically, this is a server that echoes everthing the client transmitted, while printing it out in the server's stdout. It's a very simple demonstration of how to implement a HIGH PERFORMANCE web server from the scratch.
 
 ## basic.c
 
@@ -14,6 +16,8 @@ The very basic socket server that only accepts and processes one connection at a
 
 ## ppc.c
 
+ppc -> process per connection
+
 The socket server that handles multiple connections concurrently by forking sub processes for each client that comes in.
 
 1) `gcc ppc.c csapp.c -o ppc.out` to compile.
@@ -24,10 +28,22 @@ The socket server that handles multiple connections concurrently by forking sub 
 
 ## prefork.c
 
-The socket server that handles multiple connections concurrently by pre-forking a bunch of processes which all accept connection from the same socket. The pre-fork number is defined by the macro `PREFORK_PROC_N`.
+The socket server that handles multiple connections concurrently by pre-forking a bunch of processes which all accept connection from the same socket. The pre-fork number is defined by the macro `PREFORK_PROC_N`. When one process finals the handling, it will exit out. The main process will be signaled for such event and spawns a new process to balance the number of processes.
 
 1) `gcc prefork.c csapp.c -o prefork.out` to compile.
 
 2) `./prefork.out` to run
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
+
+## tpc.c
+
+tpc -> thread per connection
+
+The socket server that handles multiple connections concurrently by creating a thread for each coming connection. The accept happens in the main thread, then hands to the created thread to handle it. Meanwhile, as threads share the same memory space, this code exploit this advantage by having a global counter that counts how many characters have been received in total. And print this number to the stdout for each time of receiving.
+
+1) `gcc -pthread tpc.c -o tpc.out` to compile.
+
+2) `./tpc.out` to run
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
