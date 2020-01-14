@@ -42,8 +42,18 @@ tpc -> thread per connection
 
 The socket server that handles multiple connections concurrently by creating a thread for each coming connection. The accept happens in the main thread, then hands to the created thread to handle it. Meanwhile, as threads share the same memory space, this code exploit this advantage by having a global counter that counts how many characters have been received in total. And print this number to the stdout for each time of receiving.
 
-1) `gcc -pthread tpc.c -o tpc.out` to compile.
+1) `gcc -pthread tpc.c csapp.c -o tpc.out` to compile.
 
 2) `./tpc.out` to run
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
+
+## select.c
+
+This server utilizes the `select` I/O multiplexing to concurrently handle multiple connections by a single thread within a single process. Also, this server accepts string from stdin to broadcast to all clients.
+
+1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+
+2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
