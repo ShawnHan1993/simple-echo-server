@@ -58,6 +58,15 @@ This server utilizes the `select` I/O multiplexing to concurrently handle multip
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
 
+## kqueue.c
+
+This server utilizes the `kqueue` and `kevent` I/O multiplexing to concurrently handle multiple connections I/O by a single thread within a single process. Also, this server accepts string from stdin.
+
+1) `gcc -pthread kqueue.c csapp.c -o kqueue.out` to compile.
+
+2) `./kqueue.out` to run. Type in stdin to send string. Send `q` to quit.
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
 ## poll.c
 
 This server utilizes the `poll` I/O multiplexing to concurrently handle multiple connections by a single thread within a single process. Also, this server accepts string from stdin to broadcast to all clients.
