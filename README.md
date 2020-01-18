@@ -57,3 +57,15 @@ This server utilizes the `select` I/O multiplexing to concurrently handle multip
 2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
+
+## poll.c
+
+This server utilizes the `poll` I/O multiplexing to concurrently handle multiple connections by a single thread within a single process. Also, this server accepts string from stdin to broadcast to all clients.
+
+The difference between `poll.c` and `select.c` is that `poll.c` supports a huge number of clients, more than `select.c`, however, at a cost of more time to re-arrange the clients array when disconnecting one. 
+
+1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+
+2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.

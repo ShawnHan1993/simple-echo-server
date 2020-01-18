@@ -1,58 +1,71 @@
 #include "csapp.h"
+#include <sys/poll.h>
 
 #define MY_PORT   9999
-#define BUFSIZE    1024
+#define BUFSIZE   1024
+#define MAX_CLIENTS 2048
 
 
 typedef struct {
-    int active_fd[FD_SETSIZE];
+    struct pollfd p[MAX_CLIENTS];
+    int nfd;
     int nread;
-    fd_set read_set;
-    fd_set ready_set;
-    int maxfd;
+    int sockfdIdx; // To remember which location in p stores the sockfd
+    int stdinIdx; // To remember which location in p stores the stdinfd
 } client_pool_t;
 
+int add_client(client_pool_t *client_pool, int fd){
+    if (client_pool->nfd >= MAX_CLIENTS) {app_error("Too many clients!");}
+    client_pool->p[client_pool->nfd].fd = fd;
+    client_pool->p[client_pool->nfd].events = POLLIN;
+    client_pool->nfd ++;
+    return client_pool->nfd - 1;
+}
 
 void init_client_pool(client_pool_t *client_pool, int sockfd){
-    FD_ZERO(&client_pool->read_set);
-    FD_SET(STDIN_FILENO, &client_pool->read_set);
-    FD_SET(sockfd, &client_pool->read_set);
+    client_pool->nfd = 0;
+    client_pool->nread = 0;
     int i;
-    for (i = 0; i < FD_SETSIZE; i++){
-        client_pool->active_fd[i] = -1;
+    for (i = 0; i < MAX_CLIENTS; i++){
+        client_pool->p[i].fd = -1;
+        client_pool->p[i].events = POLLIN;
+        client_pool->p[i].revents = 0;
     }
-    client_pool->maxfd = sockfd;
+    int stdinIdx = add_client(client_pool, STDIN_FILENO);
+    client_pool->stdinIdx = stdinIdx;
+    int sockfdIdx = add_client(client_pool, sockfd);
+    client_pool->sockfdIdx = sockfdIdx;
     return;
 }
 
 void rm_client(client_pool_t *client_pool, int fd){
-    if (client_pool->active_fd[fd] != 1){app_error("Closing un-opened client!");}
-    if (client_pool->maxfd == fd){
-        int i;
-        for (i = client_pool->maxfd - 1; i >= 0; i--){
-            if (client_pool->active_fd[i] > 0){
-                client_pool->maxfd = i;
-                break;
-            }
+    int i, stopIdx;
+    for (i = client_pool->nfd - 1; i >= 0; i --){
+        if (client_pool->p[i].fd == fd){
+            stopIdx = i;
         }
     }
-    FD_CLR(fd, &client_pool->read_set);
+    for (i = stopIdx; i < client_pool->nfd - 1; i ++){
+        client_pool->p[i] = client_pool->p[i + 1];
+    }
+    client_pool->nfd --;
 }
 
 void check_ready_fd(client_pool_t *client_pool){
     int i, fd;
     char buffer[BUFSIZE];
-    for (i = 0; (i <= client_pool->maxfd) && (client_pool->nread > 0); i++){
-        if (FD_ISSET(i, &client_pool->ready_set)){
+    for (i = 0; (i < client_pool->nfd && client_pool->nread > 0); i++){
+        if (client_pool->p[i].revents & POLLIN){
+            client_pool->p[i].revents = 0;
             client_pool->nread --;
             size_t size;
-            size = recv(i, buffer, BUFSIZE, 0);
+            size = recv(client_pool->p[i].fd, buffer, BUFSIZE, 0);
             printf("Received %s", buffer);
             if (buffer[0] == 'q') {
-                close(i);
-                rm_client(client_pool, i);
+                close(client_pool->p[i].fd);
+                rm_client(client_pool, client_pool->p[i].fd);
             }
-            send(i, buffer, size, 0);
+            send(client_pool->p[i].fd, buffer, size, 0);
             memset(buffer, 0, BUFSIZE);
         }
     }
@@ -60,20 +73,8 @@ void check_ready_fd(client_pool_t *client_pool){
 
 void broadcast(client_pool_t *client_pool, char *cmd, int cmd_len){
     int i;
-    for (i = 0; i <= client_pool->maxfd; i++){
-        if (client_pool->active_fd[i] > 0){
-            send(i, cmd, cmd_len, 0);
-        }
-    }
-}
-
-void add_client(client_pool_t *client_pool, int fd){
-    if (fd > FD_SETSIZE) {app_error("Too many clients!");}
-    client_pool->active_fd[fd] = 1;
-    if (fd > client_pool->maxfd){
-        client_pool->maxfd = fd;
-    }
-    FD_SET(fd, &client_pool->read_set);
+    for (i = 0; i < client_pool->nfd; i++)
+        send(client_pool->p[i].fd, cmd, cmd_len, 0);
 }
 
 int main(int argc, char const *argv[]){
@@ -110,9 +111,8 @@ int main(int argc, char const *argv[]){
     init_client_pool(&client_pool, sockfd);
     char cmd_buf[BUFSIZE];
     while (1){
-        client_pool.ready_set = client_pool.read_set;
-        client_pool.nread = Select(client_pool.maxfd + 1, &client_pool.ready_set, NULL, NULL, NULL);
-        if (FD_ISSET(sockfd, &client_pool.ready_set)){
+        client_pool.nread = poll(client_pool.p, client_pool.nfd, NULL);
+        if (client_pool.p[client_pool.sockfdIdx].revents & POLLIN){
             clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
             printf("%s:%d connected in fd %d\n",
                 inet_ntoa(client_addr.sin_addr),
@@ -120,7 +120,7 @@ int main(int argc, char const *argv[]){
                 clientfd);
             add_client(&client_pool, clientfd);
         }
-        else if (FD_ISSET(STDIN_FILENO, &client_pool.ready_set)){
+        else if (client_pool.p[client_pool.stdinIdx].revents & POLLIN){
             size_t size;
             size = read(STDIN_FILENO, cmd_buf, BUFSIZE);
             printf("Received cmd from stdin: %s", cmd_buf);
