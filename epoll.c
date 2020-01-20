@@ -1,5 +1,5 @@
 #include "csapp.h"
-#include <sys/event>
+#include <sys/epoll.h>
 
 
 #define MY_PORT   9999
@@ -7,50 +7,27 @@
 #define EVENT_NUM 20
 
 
-int Kevent(int kq,
-    const struct kevent *changelist, int nchanges,
-    struct kevent *eventlist, int nevents,
-    const struct timespec *timeout)
-{
-    int rc;
-    if ((rc = kevent(kq, changelist, nchanges, eventlist, nevents, timeout)) < 0)
-    unix_error("Kevent error");
-    return rc;
+void init_interest_list(int epfd, int sockfd, struct epoll_event *conn_and_cmd_event){
+    conn_and_cmd_event[0].events = EPOLLIN;
+    conn_and_cmd_event[0].data.fd = sockfd;
+    conn_and_cmd_event[1].events = EPOLLIN;
+    conn_and_cmd_event[1].data.fd = STDIN_FILENO;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, sockfd, &conn_and_cmd_event[0]);
+    epoll_ctl(epfd, EPOLL_CTL_ADD, STDIN_FILENO, &conn_and_cmd_event[1]);
 }
 
-int Kqueue(void){
-    int rc;
-    if ((rc = kqueue()) < 0)
-    unix_error("Kqueue error");
-    return rc;
+void rm_client(int epfd, size_t fd){
+    struct epoll_event tmp;
+    tmp.events = EPOLLIN;
+    tmp.data.fd = fd;
+    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &tmp);
 }
 
-
-typedef struct {
-    int active_fd[FD_SETSIZE];
-    int nread;
-    fd_set read_set;
-    fd_set ready_set;
-    int maxfd;
-} client_pool_t;
-
-
-void init_kqueue(int kq, int sockfd, struct kevent *conn_and_cmd_event){
-    EV_SET(&conn_and_cmd_event[0], sockfd, EVFILT_READ, EV_ADD, 0, 20, NULL);
-    EV_SET(&conn_and_cmd_event[1], STDIN_FILENO, EVFILT_READ, EV_ADD, 0, 0, NULL);
-    Kevent(kq, conn_and_cmd_event, 2, NULL, 0, NULL);
-}
-
-void rm_client(int kq, size_t fd){
-    struct kevent tmp;
-    EV_SET(&tmp, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
-    Kevent(kq, &tmp, 1, NULL, 0, NULL);
-}
-
-void add_client(int kq, int fd){
-    struct kevent tmp;
-    EV_SET(&tmp, fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
-    Kevent(kq, &tmp, 1, NULL, 0, NULL);
+void add_client(int epfd, int fd){
+    struct epoll_event tmp;
+    tmp.events = EPOLLIN;
+    tmp.data.fd = fd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &tmp);
 }
 
 int main(int argc, char const *argv[]){
@@ -84,30 +61,30 @@ int main(int argc, char const *argv[]){
     int addrlen=sizeof(client_addr);
 
 
-    int kq;
-    struct kevent conn_and_cmd_event[2];
-    struct kevent events[EVENT_NUM];
-    kq = Kqueue();
+    int epfd;
+    struct epoll_event conn_and_cmd_event[2];
+    struct epoll_event events[EVENT_NUM];
+    epfd = epoll_create(1);
 
     int nevents;
 
-    init_kqueue(kq, sockfd, conn_and_cmd_event);
+    init_interest_list(epfd, sockfd, conn_and_cmd_event);
     char cmd_buf[BUFSIZE];
     int stop_flag = 0;
     while (stop_flag != 1){
-        nevents = kevent(kq, NULL, 0, events, EVENT_NUM, NULL);
+        nevents = epoll_wait(epfd, events, EVENT_NUM, -1);
         if (nevents < 0)
         unix_error("Error!");
         for (unsigned i = 0; i < nevents; i++){
-            struct kevent kev = events[i];
-            int tmpfd = (int)kev.ident;
+            struct epoll_event eev = events[i];
+            int tmpfd = (int)eev.data.fd;
             if (tmpfd == sockfd){
                 clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
                 printf("%s:%d connected in fd %d\n",
                     inet_ntoa(client_addr.sin_addr),
                     ntohs(client_addr.sin_port),
                     clientfd);
-                add_client(kq, clientfd);
+                add_client(epfd, clientfd);
             }
             else if (tmpfd == STDIN_FILENO){
                 size_t size;
@@ -124,7 +101,7 @@ int main(int argc, char const *argv[]){
                 size = recv(tmpfd, buffer, BUFSIZE, 0);
                 printf("Received %s", buffer);
                 if (buffer[0] == 'q') {
-                    rm_client(kq, tmpfd);
+                    rm_client(epfd, tmpfd);
                     close(tmpfd);
                 }
                 send(tmpfd, buffer, size, 0);

@@ -1,4 +1,5 @@
 #include "csapp.h"
+#include <sys/event.h>
 
 
 #define MY_PORT   9999
@@ -8,6 +9,26 @@
 #define MAX_TASK_BUF_SIZE 1024
 #define READ_TASK 0
 #define ACCEPT_TASK 1
+
+
+int Kevent(int kq,
+    const struct kevent *changelist, int nchanges,
+    struct kevent *eventlist, int nevents,
+    const struct timespec *timeout)
+{
+    int rc;
+    if ((rc = kevent(kq, changelist, nchanges, eventlist, nevents, timeout)) < 0)
+    unix_error("Kevent error");
+    return rc;
+}
+
+int Kqueue(void){
+    int rc;
+    if ((rc = kqueue()) < 0)
+    unix_error("Kqueue error");
+    return rc;
+}
+
 
 int kq;
 
