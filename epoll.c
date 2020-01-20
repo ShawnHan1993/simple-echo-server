@@ -17,15 +17,18 @@ void init_interest_list(int epfd, int sockfd, struct epoll_event *conn_and_cmd_e
 }
 
 void rm_client(int epfd, size_t fd){
+    // The following event is ignored
+    // see http://man7.org/linux/man-pages/man2/epoll_ctl.2.html
     struct epoll_event tmp;
-    tmp.events = EPOLLIN;
+    tmp.events = EPOLLIN | EPOLLRDHUP;
     tmp.data.fd = fd;
+    // ----
     epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &tmp);
 }
 
 void add_client(int epfd, int fd){
     struct epoll_event tmp;
-    tmp.events = EPOLLIN;
+    tmp.events = EPOLLIN | EPOLLRDHUP;
     tmp.data.fd = fd;
     epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &tmp);
 }
@@ -78,34 +81,42 @@ int main(int argc, char const *argv[]){
         for (unsigned i = 0; i < nevents; i++){
             struct epoll_event eev = events[i];
             int tmpfd = (int)eev.data.fd;
-            if (tmpfd == sockfd){
-                clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
-                printf("%s:%d connected in fd %d\n",
-                    inet_ntoa(client_addr.sin_addr),
-                    ntohs(client_addr.sin_port),
-                    clientfd);
-                add_client(epfd, clientfd);
+            if (eev.events & EPOLLRDHUP)
+            {
+                rm_client(epfd, tmpfd);
+                close(tmpfd);
+                printf("Closed %d.\n", tmpfd);
             }
-            else if (tmpfd == STDIN_FILENO){
-                size_t size;
-                size = read(STDIN_FILENO, cmd_buf, BUFSIZE);
-                printf("Received cmd from stdin: %s", cmd_buf);
-                if (cmd_buf[0] == 'q'){
-                    printf("Stop server.");
-                    stop_flag = 1;
+            else if (eev.events & EPOLLIN){
+                if (tmpfd == sockfd){
+                    clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
+                    printf("%s:%d connected in fd %d.\n",
+                        inet_ntoa(client_addr.sin_addr),
+                        ntohs(client_addr.sin_port),
+                        clientfd);
+                    add_client(epfd, clientfd);
                 }
-                memset(cmd_buf, 0, BUFSIZE);
-            }
-            else {
-                size_t size;
-                size = recv(tmpfd, buffer, BUFSIZE, 0);
-                printf("Received %s", buffer);
-                if (buffer[0] == 'q') {
-                    rm_client(epfd, tmpfd);
-                    close(tmpfd);
+                else if (tmpfd == STDIN_FILENO){
+                    size_t size;
+                    size = read(STDIN_FILENO, cmd_buf, BUFSIZE);
+                    printf("Received cmd from stdin: %s", cmd_buf);
+                    if (cmd_buf[0] == 'q'){
+                        printf("Stop server.\n");
+                        stop_flag = 1;
+                    }
+                    memset(cmd_buf, 0, BUFSIZE);
                 }
-                send(tmpfd, buffer, size, 0);
-                memset(buffer, 0, BUFSIZE);
+                else {
+                    size_t size;
+                    size = recv(tmpfd, buffer, BUFSIZE, 0);
+                    printf("Received %s.\n", buffer);
+                    if (buffer[0] == 'q') {
+                        rm_client(epfd, tmpfd);
+                        close(tmpfd);
+                    }
+                    send(tmpfd, buffer, size, 0);
+                    memset(buffer, 0, BUFSIZE);
+                }
             }
         }
     }

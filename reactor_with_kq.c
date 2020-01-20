@@ -1,5 +1,6 @@
 #include "csapp.h"
 #include <sys/event.h>
+#include "reactor.h"
 
 
 #define MY_PORT   9999
@@ -7,8 +8,6 @@
 #define EVENT_NUM 20
 #define THREAD_POOL_SIZE 10
 #define MAX_TASK_BUF_SIZE 1024
-#define READ_TASK 0
-#define ACCEPT_TASK 1
 
 
 int Kevent(int kq,
@@ -31,40 +30,6 @@ int Kqueue(void){
 
 
 int kq;
-
-typedef struct {
-    int fd;
-    int type;
-} task_t;
-
-typedef struct {
-    task_t tasks[MAX_TASK_BUF_SIZE];
-    int rear;
-    int head;
-    sem_t slots;
-    sem_t items;
-    sem_t mutex;
-} task_buf_t;
-
-void rm_task_buf(task_buf_t *task_buf, task_t *task){
-    P(&task_buf->items);
-    P(&task_buf->mutex);
-    task->fd = task_buf->tasks[task_buf->rear].fd;
-    task->type = task_buf->tasks[task_buf->rear].type;
-    task_buf->rear = (task_buf->rear + 1 ) % MAX_TASK_BUF_SIZE;
-    V(&task_buf->mutex);
-    V(&task_buf->slots); 
-}
-
-void inst_task_buf(task_buf_t *task_buf, int fd, int task_type){
-    P(&task_buf->slots);
-    P(&task_buf->mutex);
-    task_buf->tasks[task_buf->head].fd = fd;
-    task_buf->tasks[task_buf->head].type = task_type;
-    task_buf->head = (task_buf->head + 1 ) % MAX_TASK_BUF_SIZE;
-    V(&task_buf->mutex);
-    V(&task_buf->items); 
-}
 
 void init_kqueue(int kq, int sockfd, struct kevent *conn_and_cmd_event){
     EV_SET(&conn_and_cmd_event[0], sockfd, EVFILT_READ, EV_ADD, 0, 20, NULL);
