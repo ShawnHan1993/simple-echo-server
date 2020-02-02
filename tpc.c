@@ -36,7 +36,7 @@ void *thread_routine(int *clientfd){
 
 
 int main(int argc, char const *argv[]){
-    sem_init(&sem, 0, 1);
+    Sem_init(&sem, 0, 1);
     int sockfd;
 	struct sockaddr_in self;
 	// char buffer[MAXBUF];

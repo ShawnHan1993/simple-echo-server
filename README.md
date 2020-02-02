@@ -81,3 +81,25 @@ The difference between `poll.c` and `select.c` is that `poll.c` supports a huge 
 2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
+
+## epoll.c
+
+This server utilizes the `epoll` I/O multiplexing to concurrently handle multiple connections by a single thread within a single process.
+
+
+1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+
+2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
+
+## reactor_with_epoll.c
+
+This server utilizes the `epoll` I/O multiplexing to concurrently handle multiple connections by a thread pool within a single process. So as called `reactor`.
+
+
+1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+
+2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+
+3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.

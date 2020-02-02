@@ -1,10 +1,13 @@
 #include "csapp.h"
-#include <sys/event>
+#include <sys/event.h>
+#include "reactor.h"
 
 
 #define MY_PORT   9999
 #define BUFSIZE   1024
 #define EVENT_NUM 20
+#define THREAD_POOL_SIZE 10
+#define MAX_TASK_BUF_SIZE 1024
 
 
 int Kevent(int kq,
@@ -26,14 +29,7 @@ int Kqueue(void){
 }
 
 
-typedef struct {
-    int active_fd[FD_SETSIZE];
-    int nread;
-    fd_set read_set;
-    fd_set ready_set;
-    int maxfd;
-} client_pool_t;
-
+int kq;
 
 void init_kqueue(int kq, int sockfd, struct kevent *conn_and_cmd_event){
     EV_SET(&conn_and_cmd_event[0], sockfd, EVFILT_READ, EV_ADD, 0, 20, NULL);
@@ -41,15 +37,39 @@ void init_kqueue(int kq, int sockfd, struct kevent *conn_and_cmd_event){
     Kevent(kq, conn_and_cmd_event, 2, NULL, 0, NULL);
 }
 
-void rm_client(int kq, size_t fd){
+void rm_client(int kq, int fd){
     struct kevent tmp;
     EV_SET(&tmp, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     Kevent(kq, &tmp, 1, NULL, 0, NULL);
 }
 
-void add_client(int kq, int fd){
+void handler(task_buf_t *task_buf){
+    pthread_detach(pthread_self());
+    char buffer[BUFSIZE];
+    size_t size;
+    while (1){
+        task_t task;
+        rm_task_buf(task_buf, &task);
+        size = recv(task.fd, buffer, BUFSIZE, 0);
+        printf("Received %s", buffer);
+        if (buffer[0] == 'q') {
+            rm_client(kq, task.fd);
+            close(task.fd);
+            return;
+        }
+        send(task.fd, buffer, size, 0);
+        memset(buffer, 0, BUFSIZE);
+    }
+}
+
+void acceptor(struct sockaddr_in * client_addr, int sockfd, int *addrlen, int kq){
+    int clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, addrlen);
+    printf("%s:%d connected in fd %d\n",
+            inet_ntoa(client_addr->sin_addr),
+            ntohs(client_addr->sin_port),
+            clientfd);
     struct kevent tmp;
-    EV_SET(&tmp, fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+    EV_SET(&tmp, clientfd, EVFILT_READ, EV_ADD, 0, 0, NULL);
     Kevent(kq, &tmp, 1, NULL, 0, NULL);
 }
 
@@ -83,8 +103,6 @@ int main(int argc, char const *argv[]){
     struct sockaddr_in client_addr;
     int addrlen=sizeof(client_addr);
 
-
-    int kq;
     struct kevent conn_and_cmd_event[2];
     struct kevent events[EVENT_NUM];
     kq = Kqueue();
@@ -94,6 +112,15 @@ int main(int argc, char const *argv[]){
     init_kqueue(kq, sockfd, conn_and_cmd_event);
     char cmd_buf[BUFSIZE];
     int stop_flag = 0;
+    int i;
+    task_buf_t task_buf;
+    Sem_init(&task_buf.slots, 0, MAX_TASK_BUF_SIZE);
+    Sem_init(&task_buf.items, 0, 0);
+    Sem_init(&task_buf.mutex, 0, 1);
+    for (i = 0; i < THREAD_POOL_SIZE; i++){
+        pthread_t tid;
+        pthread_create(&tid, NULL, handler, &task_buf);
+    }
     while (stop_flag != 1){
         nevents = kevent(kq, NULL, 0, events, EVENT_NUM, NULL);
         if (nevents < 0)
@@ -102,12 +129,7 @@ int main(int argc, char const *argv[]){
             struct kevent kev = events[i];
             int tmpfd = (int)kev.ident;
             if (tmpfd == sockfd){
-                clientfd = Accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
-                printf("%s:%d connected in fd %d\n",
-                    inet_ntoa(client_addr.sin_addr),
-                    ntohs(client_addr.sin_port),
-                    clientfd);
-                add_client(kq, clientfd);
+                acceptor(&client_addr, sockfd, addrlen, kq);
             }
             else if (tmpfd == STDIN_FILENO){
                 size_t size;

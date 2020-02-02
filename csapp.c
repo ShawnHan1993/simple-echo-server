@@ -1063,24 +1063,6 @@ int Open_listenfd(char *port)
 	unix_error("Open_listenfd error");
     return rc;
 }
-
-int Kevent(int kq,
-    const struct kevent *changelist, int nchanges,
-    struct kevent *eventlist, int nevents,
-    const struct timespec *timeout)
-{
-    int rc;
-    if ((rc = kevent(kq, changelist, nchanges, eventlist, nevents, timeout)) < 0)
-    unix_error("Kevent error");
-    return rc;
-}
-
-int Kqueue(void){
-    int rc;
-    if ((rc = kqueue()) < 0)
-    unix_error("Kqueue error");
-    return rc;
-}
 /* $end csapp.c */
 
 
