@@ -76,9 +76,9 @@ This server utilizes the `poll` I/O multiplexing to concurrently handle multiple
 
 The difference between `poll.c` and `select.c` is that `poll.c` supports a huge number of clients, more than `select.c`, however, at a cost of more time to re-arrange the clients array when disconnecting one. 
 
-1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+1) `gcc -pthread poll.c csapp.c -o poll.out` to compile.
 
-2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+2) `./poll.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
 
@@ -87,9 +87,9 @@ The difference between `poll.c` and `select.c` is that `poll.c` supports a huge 
 This server utilizes the `epoll` I/O multiplexing to concurrently handle multiple connections by a single thread within a single process.
 
 
-1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+1) `gcc -pthread epoll.c csapp.c -o epoll.out` to compile.
 
-2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+2) `./epoll.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
 
@@ -98,8 +98,8 @@ This server utilizes the `epoll` I/O multiplexing to concurrently handle multipl
 This server utilizes the `epoll` I/O multiplexing to concurrently handle multiple connections by a thread pool within a single process. So as called `reactor`.
 
 
-1) `gcc -pthread select.c csapp.c -o select.out` to compile.
+1) `gcc -pthread reactor_with_epoll.c csapp.c -o reactor_with_epoll.out` to compile.
 
-2) `./select.out` to run. Type in stdin to send string. Send `q` to quit.
+2) `./reactor_with_epoll.out` to run. Type in stdin to send string. Send `q` to quit.
 
 3) Try `telnet 127.0.0.1 9999` in multiple terminals to connect and test.
